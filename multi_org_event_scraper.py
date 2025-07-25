@@ -588,6 +588,185 @@ def get_buckeye_events() -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# American Experiment scraper
+# ---------------------------------------------------------------------------
+
+_AE_EVENTS_URL = "https://www.americanexperiment.org/events/"
+_AE_ORG = "Center of the American Experiment"
+_AE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
+
+def _parse_ae_date_from_container(container: Tag) -> Optional[dt.date]:
+    """Given a container element from the American Experiment events listing,
+    attempt to construct a datetime.date from its month/day/year spans.
+
+    The markup for an event’s date resembles:
+
+        <div class="datetime">
+            <span class="date">
+                <span class="month">Jul</span>
+                <span class="day">29</span>
+                <span class="year"> / 2025</span>
+            </span>
+            <span class="time">@ 5:00 pm</span>
+        </div>
+
+    We assemble the month/day/year parts into a string like "Jul 29 2025" and
+    parse it.  If parsing fails or any part is missing, return None.
+    """
+    try:
+        month_tag = container.find("span", class_="month")
+        day_tag = container.find("span", class_="day")
+        year_tag = container.find("span", class_="year")
+        if not (month_tag and day_tag and year_tag):
+            return None
+        month = month_tag.get_text(strip=True)
+        day = day_tag.get_text(strip=True)
+        year_text = year_tag.get_text()
+        m = re.search(r"\b(\d{4})\b", year_text)
+        year = m.group(1) if m else None
+        if not year:
+            return None
+        date_str = f"{month} {day} {year}"
+        return parser.parse(date_str).date()
+    except Exception:
+        return None
+
+
+def get_american_experiment_events(max_events: int = 20) -> pd.DataFrame:
+    """Scrape upcoming events from the Center of the American Experiment.
+
+    The American Experiment events page lists upcoming events within <article>
+    elements.  Each article contains a title (<h2>) and a datetime section
+    composed of spans for month, day and year.  This function fetches the
+    listing page, extracts event names and dates, and returns events on or
+    after today.  If the site cannot be fetched (e.g. due to a 403), an empty
+    DataFrame is returned.
+
+    Parameters
+    ----------
+    max_events : int, optional
+        Maximum number of events to parse from the listing page.  Defaults to
+        20 to guard against extremely long listings.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns ["event_name", "date", "organization"].
+    """
+    today = _today()
+    try:
+        resp = requests.get(_AE_EVENTS_URL, headers=_AE_HEADERS, timeout=20)
+        resp.raise_for_status()
+    except Exception:
+        return pd.DataFrame(columns=["event_name", "date", "organization"])
+    soup = BeautifulSoup(resp.text, "html.parser")
+    rows: List[dict] = []
+    for article in soup.find_all("article")[:max_events]:
+        title_tag = article.find(["h2", "h3"])
+        if not title_tag:
+            continue
+        name = title_tag.get_text(strip=True)
+        if not name:
+            continue
+        dt_container = article.find("div", class_="datetime")
+        if not dt_container:
+            dt_container = article.find("span", class_="date")
+        evt_date = None
+        if dt_container:
+            evt_date = _parse_ae_date_from_container(dt_container)
+        if evt_date is None:
+            text = article.get_text(" ", strip=True)
+            m = re.search(r"\b([A-Za-z]{3,9}\s+\d{1,2},?\s*\d{4})", text)
+            if m:
+                try:
+                    evt_date = parser.parse(m.group(1)).date()
+                except Exception:
+                    evt_date = None
+        if evt_date is None or evt_date < today:
+            continue
+        rows.append({"event_name": name, "date": evt_date, "organization": _AE_ORG})
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = (
+            df.drop_duplicates(subset=["event_name", "date"])
+            .sort_values("date")
+            .reset_index(drop=True)
+        )
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Wisconsin Institute for Law & Liberty scraper
+# ---------------------------------------------------------------------------
+
+_WILL_EVENTS_URL = "https://will-law.org/events/"
+_WILL_ORG = "Wisconsin Institute for Law & Liberty"
+_WILL_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
+
+def get_will_events() -> pd.DataFrame:
+    """Scrape upcoming events from the Wisconsin Institute for Law & Liberty (WILL)."""
+    today = _today()
+    try:
+        resp = requests.get(_WILL_EVENTS_URL, headers=_WILL_HEADERS, timeout=20)
+        resp.raise_for_status()
+    except Exception:
+        return pd.DataFrame(columns=["event_name", "date", "organization"])
+    soup = BeautifulSoup(resp.text, "html.parser")
+    # Attempt to find a heading containing a year in the event title
+    title_tag = soup.find(["h1", "h2", "h3"], string=re.compile(r"(19|20)\d{2}"))
+    if not title_tag:
+        title_tag = soup.find(["h1", "h2", "h3"])
+    if not title_tag:
+        return pd.DataFrame(columns=["event_name", "date", "organization"])
+    event_name = title_tag.get_text(strip=True)
+    year_match = re.search(r"(19|20)\d{2}", event_name)
+    event_year = year_match.group(0) if year_match else None
+    date_text = None
+    for p in soup.find_all("p"):
+        txt = p.get_text(strip=True)
+        if txt.upper().startswith("DATE:"):
+            date_text = txt.split(":", 1)[1].strip()
+            break
+    if not date_text:
+        full_text = soup.get_text(" ", strip=True)
+        m = re.search(
+            r"\b([A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?),?\s*(\d{4})?", full_text
+        )
+        if m:
+            month_day = m.group(1)
+            yr = m.group(2) or event_year
+            date_text = f"{month_day} {yr}" if yr else month_day
+    if not date_text:
+        return pd.DataFrame(columns=["event_name", "date", "organization"])
+    cleaned = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", date_text)
+    if not re.search(r"\b(19|20)\d{2}\b", cleaned) and event_year:
+        cleaned = f"{cleaned} {event_year}"
+    try:
+        evt_date = parser.parse(cleaned, fuzzy=True).date()
+    except Exception:
+        return pd.DataFrame(columns=["event_name", "date", "organization"])
+    if evt_date < today:
+        return pd.DataFrame(columns=["event_name", "date", "organization"])
+    return pd.DataFrame(
+        [{"event_name": event_name, "date": evt_date, "organization": _WILL_ORG}]
+    )
+
+
+# ---------------------------------------------------------------------------
 # Placeholder for additional organizations
 # ---------------------------------------------------------------------------
 
@@ -614,6 +793,10 @@ ORGANIZATION_SCRAPERS: Dict[str, Callable[[], pd.DataFrame]] = {
     "nevada_policy": get_nevada_policy_events,
     "texas_policy": get_texas_policy_events,
     "buckeye": get_buckeye_events,
+    # Additional scrapers for other organizations.  These may return empty
+    # DataFrames if the upstream site denies access or no events are listed.
+    "american_experiment": get_american_experiment_events,
+    "will_law": get_will_events,
     # Additional scrapers can be registered below.  Functions that return empty
     # DataFrames can be used as placeholders until a bespoke parser is written.
     # For example:
