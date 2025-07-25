@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+*.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VSCode settings
+.vscode/
+
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+
+# Log or temp files
+*.log
+*.tmp
+
+# Output files (CSV optional)
+*.csv
+
+# Ignore data output if generated locally (uncomment to skip tracking locally run results)
+# site/data.json

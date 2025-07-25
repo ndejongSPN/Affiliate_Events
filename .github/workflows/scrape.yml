@@ -1,0 +1,33 @@
+name: Scrape and Deploy Events
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # Daily at 6:00 UTC
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scraper
+        run: python multi_org_event_scraper.py
+
+      - name: Commit and push updated data
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add site/data.json
+          git commit -m "Update events data" || echo "No changes to commit"
+          git push
