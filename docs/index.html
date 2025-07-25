@@ -1,18 +1,55 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Upcoming Policy Events</title>
+  <title>Affiliate Events</title>
   <style>
-    body { font-family: sans-serif; padding: 2rem; max-width: 900px; margin: auto; }
-    h1 { font-size: 2rem; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
-    th { background-color: #f2f2f2; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2rem auto;
+      padding: 1rem;
+      max-width: 900px;
+      line-height: 1.6;
+      color: #333;
+    }
+
+    h1 {
+      font-size: 2rem;
+      border-bottom: 2px solid #ccc;
+      padding-bottom: 0.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+    }
+
+    th, td {
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+
+    th {
+      background-color: #f7f7f7;
+    }
+
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+
+    .footer {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      color: #666;
+    }
   </style>
 </head>
 <body>
-  <h1>Upcoming Events</h1>
+  <h1>Upcoming Affiliate Events</h1>
+  <p>This list updates automatically as new events are scraped from affiliate websites.</p>
+
   <table>
     <thead>
       <tr><th>Date</th><th>Event</th><th>Organization</th></tr>
@@ -20,20 +57,41 @@
     <tbody id="events"></tbody>
   </table>
 
+  <div class="footer">
+    Last updated automatically via GitHub Actions.
+  </div>
+
   <script>
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString(undefined, {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    }
+
     fetch('data.json')
       .then(response => response.json())
       .then(events => {
         const tbody = document.getElementById('events');
+        if (!events.length) {
+          tbody.innerHTML = '<tr><td colspan="3">No events found.</td></tr>';
+        }
         events.forEach(event => {
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${event.date}</td><td>${event.event_name}</td><td>${event.organization}</td>`;
+          tr.innerHTML = `
+            <td>${formatDate(event.date)}</td>
+            <td>${event.event_name}</td>
+            <td>${event.organization}</td>
+          `;
           tbody.appendChild(tr);
         });
       })
       .catch(err => {
         document.getElementById('events').innerHTML =
-          `<tr><td colspan="3">Failed to load data: ${err}</td></tr>`;
+          `<tr><td colspan="3">Error loading events: ${err.message}</td></tr>`;
       });
   </script>
 </body>
