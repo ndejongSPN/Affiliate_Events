@@ -31,9 +31,20 @@
     }
 
     p.description {
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
       font-size: 1rem;
       color: var(--muted);
+    }
+
+    .filters {
+      margin-bottom: 1.5rem;
+    }
+
+    .filters input,
+    .filters select {
+      padding: 0.5rem;
+      margin-right: 1rem;
+      font-size: 1rem;
     }
 
     table {
@@ -99,6 +110,13 @@
   <h1>Upcoming Affiliate Events</h1>
   <p class="description">Automatically updated list of upcoming events from affiliate organizations.</p>
 
+  <div class="filters">
+    <input type="text" id="search" placeholder="Search events..." />
+    <select id="orgFilter">
+      <option value="">All Organizations</option>
+    </select>
+  </div>
+
   <table>
     <thead>
       <tr><th>Date</th><th>Event</th><th>Organization</th></tr>
@@ -107,7 +125,7 @@
   </table>
 
   <div class="footer">
-    Data refreshes daily via GitHub Actions · Last updated from scraped sources
+    Data updates daily via GitHub Actions · Last refreshed from scraped sources
   </div>
 
   <script>
@@ -121,29 +139,68 @@
       });
     }
 
+    let allEvents = [];
+
+    function renderTable(events) {
+      const tbody = document.getElementById('events');
+      tbody.innerHTML = '';
+
+      if (!events.length) {
+        tbody.innerHTML = '<tr><td colspan="3">No matching events found.</td></tr>';
+        return;
+      }
+
+      events.forEach(event => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${formatDate(event.date)}</td>
+          <td>${event.event_name}</td>
+          <td>${event.organization}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function updateFilters() {
+      const searchValue = document.getElementById('search').value.toLowerCase();
+      const selectedOrg = document.getElementById('orgFilter').value;
+
+      const filtered = allEvents.filter(ev => {
+        const matchesText = (
+          ev.event_name.toLowerCase().includes(searchValue) ||
+          ev.organization.toLowerCase().includes(searchValue)
+        );
+        const matchesOrg = !selectedOrg || ev.organization === selectedOrg;
+        return matchesText && matchesOrg;
+      });
+
+      renderTable(filtered);
+    }
+
     fetch('data.json')
       .then(res => res.json())
       .then(events => {
-        const tbody = document.getElementById('events');
-        if (!events.length) {
-          tbody.innerHTML = '<tr><td colspan="3">No events available.</td></tr>';
-          return;
-        }
+        allEvents = events;
 
-        events.forEach(event => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${formatDate(event.date)}</td>
-            <td>${event.event_name}</td>
-            <td>${event.organization}</td>
-          `;
-          tbody.appendChild(tr);
+        // Populate organization filter
+        const orgs = [...new Set(events.map(e => e.organization))].sort();
+        const orgFilter = document.getElementById('orgFilter');
+        orgs.forEach(org => {
+          const option = document.createElement('option');
+          option.value = org;
+          option.textContent = org;
+          orgFilter.appendChild(option);
         });
+
+        renderTable(events);
       })
       .catch(err => {
         document.getElementById('events').innerHTML =
           `<tr><td colspan="3">⚠️ Error loading events: ${err.message}</td></tr>`;
       });
+
+    document.getElementById('search').addEventListener('input', updateFilters);
+    document.getElementById('orgFilter').addEventListener('change', updateFilters);
   </script>
 </body>
 </html>
