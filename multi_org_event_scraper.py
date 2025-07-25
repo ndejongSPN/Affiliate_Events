@@ -681,7 +681,7 @@ if __name__ == "__main__":  # pragma: no cover
     df = get_all_events(include_past=args.all)
     pd.set_option("display.max_rows", None)
     print(df)
-    site_data_path = Path("site/data.json")
+    site_data_path = Path("docs/data.json")
     site_data_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_json(site_data_path, orient="records", date_format="iso")
     print(f"Saved → {site_data_path.resolve()}")
