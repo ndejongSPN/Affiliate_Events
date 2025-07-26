@@ -1862,3 +1862,8 @@ if __name__ == "__main__":  # pragma: no cover
     pd.set_option("display.max_rows", None)
     print(df)
     _to_csv_if_requested(df, args.csv)
+    # Output to docs/data.json
+    out_json = Path(__file__).parent / "docs" / "data.json"
+    out_json.parent.mkdir(parents=True, exist_ok=True)
+    df.to_json(out_json, orient="records", date_format="iso")
+    print(f"Saved → {out_json.resolve()}")
